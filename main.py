@@ -197,7 +197,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if current_mode == "image" and last_image[user_id]:
             image_data = last_image[user_id]
-            messages = [
+            messages = list(conversation_history[user_id]) + [
                 {"role": "user", "content": [
                     {"type": "text", "text": user_message},
                     {"type": "image_url", "image_url": {
@@ -207,13 +207,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
         elif current_mode == "code":
             language = user_preferences[user_id]["language"]
-            messages = [
-                {"role": "system", "content": f"You are a helpful coding assistant. Generate {language.capitalize()} code."},
-                {"role": "user", "content": f"Generate {language.capitalize()} code for: {user_message}"}
-            ]
+            system_message = {"role": "system", "content": f"You are a helpful coding assistant. Generate {language.capitalize()} code."}
+            messages = [system_message] + list(conversation_history[user_id])
         else:
             # Include conversation history in the messages
             messages = list(conversation_history[user_id])
+
+        # Add a system message at the beginning if it's not already there
+        if not messages or messages[0]["role"] != "system":
+            messages.insert(0, {"role": "system", "content": "You are a helpful AI assistant. Respond based on the conversation history."})
 
         completion = get_groq_completion(current_model, messages, 0.7, 2000)
         bot_response = completion.choices[0].message.content
@@ -317,6 +319,12 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conversation_history[user_id].clear()
     await update.message.reply_text("Conversation history has been cleared.")
 
+async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    history = conversation_history[user_id]
+    history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
+    await update.message.reply_text(f"Current conversation history:\n\n{history_text}")
+
 def main():
     # Preload the button image into cache
     load_button_image()
@@ -331,6 +339,7 @@ def main():
     # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("clear", clear_history))
+    application.add_handler(CommandHandler("history", show_history))
     application.add_handler(CallbackQueryHandler(mode_callback, pattern="^mode_"))
     application.add_handler(CallbackQueryHandler(show_model_selection, pattern="^select_model$"))
     application.add_handler(CallbackQueryHandler(model_callback, pattern="^select_model_"))
