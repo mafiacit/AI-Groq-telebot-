@@ -77,7 +77,7 @@ LANGUAGES = {
 user_preferences = defaultdict(lambda: {"model": "llama-3.1-70b-versatile", "mode": "chat", "language": "python"})
 
 # Path to the button image file
-BUTTON_IMAGE_PATH = "button_layout.png"
+BUTTON_IMAGE_PATH = "IMG_3008.png"
 
 # Cache for the button image
 button_image_cache = None
@@ -107,7 +107,7 @@ def create_button_layout(items, callback_prefix):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_user_allowed(update.effective_user.id):
-        await update.message.reply_text("Please contact admin @kingkonfidents for access.")
+        await update.message.reply_text("Please contact admin @anonymousboyzzs for access.")
         return
 
     # Send the button image using the cached version
