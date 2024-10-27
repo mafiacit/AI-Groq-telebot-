@@ -4,7 +4,7 @@ import mimetypes
 import logging
 import traceback
 import tempfile
-from collections import defaultdict
+from collections import defaultdict, deque
 from dotenv import load_dotenv
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -31,6 +31,9 @@ ALLOWED_USER_IDS = set(map(int, os.getenv("ALLOWED_USER_IDS", "").split(',')))
 
 # Store the last image for each user
 last_image = defaultdict(lambda: None)
+
+# Store conversation history for each user
+conversation_history = defaultdict(lambda: deque(maxlen=10))
 
 # Define vision-capable models
 VISION_MODELS = [
@@ -188,6 +191,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_model = user_preferences[user_id]["model"]
     current_mode = user_preferences[user_id]["mode"]
 
+    # Add the user's message to the conversation history
+    conversation_history[user_id].append({"role": "user", "content": user_message})
+
     try:
         if current_mode == "image" and last_image[user_id]:
             image_data = last_image[user_id]
@@ -206,15 +212,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 {"role": "user", "content": f"Generate {language.capitalize()} code for: {user_message}"}
             ]
         else:
-            messages = [{"role": "user", "content": user_message}]
+            # Include conversation history in the messages
+            messages = list(conversation_history[user_id])
 
         completion = get_groq_completion(current_model, messages, 0.7, 2000)
+        bot_response = completion.choices[0].message.content
+
+        # Add the bot's response to the conversation history
+        conversation_history[user_id].append({"role": "assistant", "content": bot_response})
 
         if current_mode == "code":
-            generated_code = completion.choices[0].message.content
             file_extension = LANGUAGES[user_preferences[user_id]["language"]]["extension"]
             with tempfile.NamedTemporaryFile(mode='w+', suffix=file_extension, delete=False) as temp_file:
-                temp_file.write(generated_code)
+                temp_file.write(bot_response)
                 temp_filename = temp_file.name
 
             with open(temp_filename, "rb") as file:
@@ -223,7 +233,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.unlink(temp_filename)
             await update.message.reply_text(f"The generated {LANGUAGES[user_preferences[user_id]['language']]['emoji']} {user_preferences[user_id]['language'].capitalize()} code has been sent as a file.")
         else:
-            await update.message.reply_text(completion.choices[0].message.content)
+            await update.message.reply_text(bot_response)
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         logger.error(traceback.format_exc())
@@ -302,6 +312,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(traceback.format_exc())
         await update.message.reply_text("Sorry, there was an error processing your file. Please try again later.")
 
+async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    conversation_history[user_id].clear()
+    await update.message.reply_text("Conversation history has been cleared.")
+
 def main():
     # Preload the button image into cache
     load_button_image()
@@ -315,6 +330,7 @@ def main():
 
     # Add handlers
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CallbackQueryHandler(mode_callback, pattern="^mode_"))
     application.add_handler(CallbackQueryHandler(show_model_selection, pattern="^select_model$"))
     application.add_handler(CallbackQueryHandler(model_callback, pattern="^select_model_"))
