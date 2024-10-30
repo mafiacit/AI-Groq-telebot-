@@ -197,11 +197,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         if current_mode == "image" and last_image[user_id]:
             image_data = last_image[user_id]
-            messages = list(conversation_history[user_id]) + [
+            messages = [
                 {"role": "user", "content": [
                     {"type": "text", "text": user_message},
                     {"type": "image_url", "image_url": {
-                        "url": f"data:{image_data['mime_type']};base64,{image_data['base64']}"
+                        "url": f"data:image/jpeg;base64,{image_data['base64']}"
                     }}
                 ]}
             ]
@@ -213,8 +213,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Include conversation history in the messages
             messages = list(conversation_history[user_id])
 
-        # Add a system message at the beginning if it's not already there
-        if not messages or messages[0]["role"] != "system":
+        # Add a system message at the beginning if it's not already there and not in image mode
+        if current_mode != "image" and (not messages or messages[0]["role"] != "system"):
             messages.insert(0, {"role": "system", "content": "You are a helpful AI assistant. Respond based on the conversation history."})
 
         completion = get_groq_completion(current_model, messages, 0.7, 2000)
@@ -354,3 +354,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+    
