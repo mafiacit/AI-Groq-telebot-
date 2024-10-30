@@ -4,6 +4,8 @@ telegram link: https://t.me/anonymousboyzzs
 Dependencies: Install all required libraries using pip. Open Command Prompt and run:
 
      pip install python-telegram-bot python-dotenv flask groq aiohttp
+
+    pip install -r requirements.txt 
    
 Certainly! This code implements a Telegram bot with various AI-powered functionalities. Here's a breakdown of what the code does:
 
