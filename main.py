@@ -253,7 +253,7 @@ async def ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
     if not is_user_allowed(user.id):
-        await update.message.reply_text("You don't have permission to enable AI conversation.")
+        await update.message.reply_text("You don't have permission to enable AI conversation. Owner @anonymousboyzzs")
         return
 
     group_conversation_states[chat_id] = True
@@ -269,7 +269,7 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
     if not is_user_allowed(user.id):
-        await update.message.reply_text("You don't have permission to disable AI conversation.")
+        await update.message.reply_text("You don't have permission to disable AI conversation. Owner @anonymousboyzzs")
         return
 
     group_conversation_states[chat_id] = False
@@ -331,7 +331,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     
     if not is_user_allowed(user_id):
-        await update.message.reply_text("Contact admin @kingkonfidents for access.")
+        await update.message.reply_text("Contact admin @anonymousboyzzs for access.")
         return
 
     user_message = update.message.text
@@ -412,7 +412,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_user_allowed(update.effective_user.id):
-        await update.message.reply_text("Sorry, you are not authorized to use this bot.")
+        await update.message.reply_text("Sorry, you are not authorized to use this bot. Owner @anonymousboyzzs")
         return
 
     user_id = update.effective_user.id
@@ -529,4 +529,4 @@ def main():
     application.run_polling()
 
 if __name__ == "__main__":
-    main()      
+    main()  
