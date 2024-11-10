@@ -212,7 +212,7 @@ async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_user_allowed(update.effective_user.id):
-        await update.message.reply_text("Please contact admin @kingkonfidents for access.")
+        await update.message.reply_text("Please contact admin @anonymousboyzzs for access.")
         return
 
     try:
@@ -220,7 +220,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open('welcome.png', 'rb') as welcome_image:
             await update.message.reply_photo(
                 photo=welcome_image,
-                caption="Welcome to the AI Assistant! 🤖\n\n"
+                caption="I'm Alicia, Anonymous we Are! 🎭\n\n"
                 "I can help you with:\n"
                 "💬 General Chat\n"
                 "📄 Document Analysis\n"
