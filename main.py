@@ -37,8 +37,8 @@ last_image = defaultdict(lambda: None)
 # Store conversation history for each user
 conversation_history = defaultdict(lambda: deque(maxlen=10))
 
-# Store user feedback
-user_feedback = defaultdict(dict)
+# Store user feedback with timestamp and feedback type
+user_feedback = defaultdict(lambda: {})
 
 # Store group conversation states
 group_conversation_states = {}
@@ -163,6 +163,53 @@ def is_user_allowed(user_id: int) -> bool:
 def create_button_layout(items, callback_prefix):
     return [[InlineKeyboardButton(text, callback_data=f"{callback_prefix}{key}")] for key, text in items.items()]
 
+async def add_feedback_buttons(message, response_id: str):
+    """Add feedback buttons to a message"""
+    keyboard = [
+        [
+            InlineKeyboardButton("👍", callback_data=f"feedback_{response_id}_positive"),
+            InlineKeyboardButton("👎", callback_data=f"feedback_{response_id}_negative")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    try:
+        await message.edit_reply_markup(reply_markup=reply_markup)
+    except Exception as e:
+        logger.error(f"Error adding feedback buttons: {str(e)}")
+        try:
+            await message.reply_text("Was this response helpful?", reply_markup=reply_markup)
+        except Exception as e:
+            logger.error(f"Error sending feedback message: {str(e)}")
+
+async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle feedback button callbacks"""
+    query = update.callback_query
+    try:
+        await query.answer()
+        
+        # Parse the callback data
+        _, response_id, feedback_type = query.data.split("_")
+        user_id = update.effective_user.id
+        
+        # Store the feedback with timestamp
+        if response_id not in user_feedback[user_id]:
+            user_feedback[user_id][response_id] = {
+                'type': feedback_type,
+                'timestamp': time.time()
+            }
+            
+            # Update the message to show feedback received
+            feedback_text = "👍 Thanks for positive feedback!" if feedback_type == "positive" else "👎 Thanks for negative feedback!"
+            new_keyboard = [[InlineKeyboardButton(feedback_text, callback_data="feedback_received")]]
+            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+            
+            # Log the feedback
+            logger.info(f"User {user_id} gave {feedback_type} feedback for response {response_id}")
+            
+    except Exception as e:
+        logger.error(f"Error handling feedback: {str(e)}")
+        await query.edit_message_reply_markup(reply_markup=None)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_user_allowed(update.effective_user.id):
         await update.message.reply_text("Please contact admin @kingkonfidents for access.")
@@ -195,7 +242,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error in start command: {str(e)}")
         await show_mode_selection(update, context, "Welcome! Please select a mode to begin:")
-
+        
 async def ai_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Enable AI conversation in the group"""
     if not update.message.chat.type in ['group', 'supergroup']:
@@ -227,28 +274,6 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     group_conversation_states[chat_id] = False
     await update.message.reply_text("AI conversation has been disabled in this group.\nUse /ai to enable it again.")
-
-async def add_feedback_buttons(message, response_id: str):
-    keyboard = [
-        [
-            InlineKeyboardButton("👍", callback_data=f"feedback_positive_{response_id}"),
-            InlineKeyboardButton("👎", callback_data=f"feedback_negative_{response_id}")
-        ]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await message.edit_reply_markup(reply_markup=reply_markup)
-    
-async def handle_feedback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    feedback_type, response_id = query.data.split("_")[1:]
-    user_id = update.effective_user.id
-    
-    user_feedback[user_id][response_id] = feedback_type
-    
-    new_keyboard = [[InlineKeyboardButton("✅ Feedback received", callback_data="feedback_received")]]
-    await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
 
 async def show_mode_selection(update: Update, context: ContextTypes.DEFAULT_TYPE, custom_message: str = None):
     keyboard = create_button_layout(MODES, "mode_")
@@ -342,7 +367,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         conversation_history[user_id].append({"role": "assistant", "content": bot_response})
 
-        response_id = f"{time.time()}_{user_id}"
+        response_id = f"{user_id}_{int(time.time())}"
 
         if current_mode == "code":
             file_extension = LANGUAGES[user_preferences[user_id]["language"]]["extension"]
@@ -377,13 +402,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 sent_message = await update.message.reply_text(bot_response)
 
+        # Add feedback buttons to the sent message
         await add_feedback_buttons(sent_message, response_id)
 
     except Exception as e:
         logger.error(f"Error processing message: {str(e)}")
         logger.error(traceback.format_exc())
         await update.message.reply_text("An error occurred. Please try again or rephrase your request.")
-
+        
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_user_allowed(update.effective_user.id):
         await update.message.reply_text("Sorry, you are not authorized to use this bot.")
@@ -438,7 +464,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             bot_response = completion.choices[0].message.content
-            response_id = f"{time.time()}_{user_id}"
+            response_id = f"{user_id}_{int(time.time())}"
 
             if len(bot_response) > 4000:
                 with tempfile.NamedTemporaryFile(mode='w+', suffix='.txt', delete=False) as temp_file:
@@ -468,15 +494,17 @@ async def clear_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 @app.route('/')
 def home():
-    return "Hello, I'm a Telegram bot!"
+    return "Hello, I'm a Telegram AI!"
 
 def run():
     app.run(host='0.0.0.0', port=8080)
 
 def main():
+    # Start the Flask server in a separate thread
     server_thread = Thread(target=run)
     server_thread.start()
 
+    # Initialize the bot
     application = Application.builder().token(os.getenv("TELEGRAM_BOT_TOKEN")).build()
 
     # Add handlers
@@ -484,16 +512,21 @@ def main():
     application.add_handler(CommandHandler("clear", clear_history))
     application.add_handler(CommandHandler("ai", ai_command))
     application.add_handler(CommandHandler("stop", stop_command))
+    
+    # Add callback query handlers
     application.add_handler(CallbackQueryHandler(mode_callback, pattern="^mode_"))
     application.add_handler(CallbackQueryHandler(show_model_selection, pattern="^select_model$"))
     application.add_handler(CallbackQueryHandler(model_callback, pattern="^select_model_"))
     application.add_handler(CallbackQueryHandler(handle_feedback, pattern="^feedback_"))
     application.add_handler(CallbackQueryHandler(show_mode_selection, pattern="^back_to_mode$"))
+    
+    # Add message handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(MessageHandler(filters.PHOTO | filters.Document.ALL, handle_document))
 
-    logger.info("Bot is ready!")
+    # Start the bot
+    logger.info("AI is ready!")
     application.run_polling()
 
 if __name__ == "__main__":
-    main()
+    main()      
